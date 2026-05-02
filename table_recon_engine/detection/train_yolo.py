@@ -25,6 +25,7 @@ def train_yolo(
     name: str,
     device: str | int | None,
     single_cls: bool,
+    amp: bool,
 ) -> None:
     model = YOLO(model_name)
     model.train(
@@ -36,6 +37,7 @@ def train_yolo(
         name=name,
         device=select_yolo_device() if device is None else device,
         single_cls=single_cls,
+        amp=amp,
     )
 
 
@@ -50,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--name", default="yolo_structure_detector")
     parser.add_argument("--device", default=None)
     parser.add_argument("--single-cls", action="store_true")
+    parser.add_argument("--no-amp", action="store_true", help="Disable AMP checks/training.")
     return parser.parse_args()
 
 
@@ -65,6 +68,7 @@ def main() -> None:
         name=args.name,
         device=args.device,
         single_cls=args.single_cls,
+        amp=not args.no_amp,
     )
 
 
