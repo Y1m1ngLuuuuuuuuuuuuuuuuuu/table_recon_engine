@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.venv/
+env/
+conda_env/
+runs/
+outputs/
+checkpoints/
+datasets/
+data/
+*.pt
+*.pth
+*.onnx
+*.log
