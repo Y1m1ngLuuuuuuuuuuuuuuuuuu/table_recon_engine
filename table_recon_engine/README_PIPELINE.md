@@ -110,6 +110,8 @@ python3 -m table_recon_engine.detection.train_yolo \
 
 推荐在 AutoDL 上使用第一层实验入口跑较大子集：
 
+这个入口会把 Ultralytics 和 Matplotlib 的运行配置目录固定到 `--work-dir/runtime`，避免训练过程在项目目录外写缓存或字体文件。
+
 ```bash
 python3 -m table_recon_engine.experiments.first_layer_pipeline \
   --extracted-dir /root/autodl-tmp/table_recon_engine_train/datasets/pubtables1m_structure/extracted \

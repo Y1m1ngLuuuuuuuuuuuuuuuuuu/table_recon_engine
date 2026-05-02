@@ -2,16 +2,43 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 
-def run_step(cmd: list[str], dry_run: bool = False) -> None:
+def prepare_runtime_env(work_dir: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    runtime_dir = work_dir / "runtime"
+    yolo_config_dir = runtime_dir / "ultralytics"
+    mpl_config_dir = runtime_dir / "matplotlib"
+    yolo_config_dir.mkdir(parents=True, exist_ok=True)
+    mpl_config_dir.mkdir(parents=True, exist_ok=True)
+    env.setdefault("YOLO_CONFIG_DIR", str(yolo_config_dir))
+    env.setdefault("MPLCONFIGDIR", str(mpl_config_dir))
+    env.setdefault("PYTHONUNBUFFERED", "1")
+
+    font_target = yolo_config_dir / "Arial.ttf"
+    if not font_target.exists():
+        for font_source in (
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
+            Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
+            Path("/Library/Fonts/Arial.ttf"),
+        ):
+            if font_source.exists():
+                shutil.copyfile(font_source, font_target)
+                break
+    return env
+
+
+def run_step(cmd: list[str], dry_run: bool = False, env: dict[str, str] | None = None) -> None:
     print("\n$ " + " ".join(cmd), flush=True)
     if dry_run:
         return
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, env=env)
 
 
 def infer_run_dir(project: Path, name: str) -> Path:
@@ -81,6 +108,7 @@ def main() -> None:
     (outputs_dir / "pipeline_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
     py = sys.executable
+    runtime_env = prepare_runtime_env(args.work_dir)
     if not args.skip_prepare:
         run_step(
             [
@@ -99,6 +127,7 @@ def main() -> None:
                 str(args.seed),
             ],
             dry_run=args.dry_run,
+            env=runtime_env,
         )
         yolo_cmd = [
             py,
@@ -115,7 +144,7 @@ def main() -> None:
         ]
         if args.copy_images:
             yolo_cmd.append("--copy-images")
-        run_step(yolo_cmd, dry_run=args.dry_run)
+        run_step(yolo_cmd, dry_run=args.dry_run, env=runtime_env)
 
     if not args.skip_train:
         train_cmd = [
@@ -147,7 +176,7 @@ def main() -> None:
             train_cmd.extend(["--device", args.device])
         if args.no_amp:
             train_cmd.append("--no-amp")
-        run_step(train_cmd, dry_run=args.dry_run)
+        run_step(train_cmd, dry_run=args.dry_run, env=runtime_env)
 
     if not args.skip_infer_eval:
         run_step(
@@ -167,6 +196,7 @@ def main() -> None:
                 str(args.conf),
             ],
             dry_run=args.dry_run,
+            env=runtime_env,
         )
         run_step(
             [
@@ -181,6 +211,7 @@ def main() -> None:
                 str(eval_json),
             ],
             dry_run=args.dry_run,
+            env=runtime_env,
         )
 
     print(f"\nmanifest={outputs_dir / 'pipeline_manifest.json'}")
