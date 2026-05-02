@@ -8,6 +8,8 @@ from typing import Any
 import torch
 from ultralytics import YOLO
 
+from table_recon_engine.structure_json import normalize_class_name
+
 
 def select_yolo_device() -> str | int:
     if torch.cuda.is_available():
@@ -38,25 +40,29 @@ def infer_yolo(
 
     payload: list[dict[str, Any]] = []
     for result in results:
-        boxes = []
+        objects = []
         if result.boxes is not None:
             xyxy = result.boxes.xyxy.detach().cpu().tolist()
             confs = result.boxes.conf.detach().cpu().tolist()
             classes = result.boxes.cls.detach().cpu().tolist()
             for coords, score, class_id in zip(xyxy, confs, classes):
-                boxes.append(
+                class_idx = int(class_id)
+                raw_name = str(model.names.get(class_idx, class_idx))
+                objects.append(
                     {
+                        "class": normalize_class_name(raw_name, class_idx),
+                        "class_id": class_idx,
                         "bbox": [float(value) for value in coords],
-                        "score": float(score),
-                        "class_id": int(class_id),
+                        "confidence": float(score),
                     }
                 )
         payload.append(
             {
+                "image": Path(str(result.path)).name,
                 "image_path": str(result.path),
                 "width": int(result.orig_shape[1]),
                 "height": int(result.orig_shape[0]),
-                "boxes": boxes,
+                "objects": objects,
             }
         )
 
@@ -66,7 +72,7 @@ def infer_yolo(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run YOLO cell detector and export JSON boxes.")
+    parser = argparse.ArgumentParser(description="Run YOLO structure detector and export standard structure JSON.")
     parser.add_argument("--weights", type=Path, required=True)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output-json", type=Path, default=Path("outputs/detections.json"))

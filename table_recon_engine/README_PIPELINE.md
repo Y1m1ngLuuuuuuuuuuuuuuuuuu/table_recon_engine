@@ -1,26 +1,71 @@
 # TSR Engine 新路线框架
 
-主线流程：
+主线流程现在拆成两层。当前优先完成第一层：
 
 ```text
-开源数据集标注 -> YOLO 标签转换 -> Albumentations 增强 -> YOLO 单元格检测
--> CellCluster 行列聚类 -> GridBuilder 虚拟网格 -> LaTeXGenerator 输出 tabular
+第一层：表格图片 -> YOLO 结构检测 -> 标准结构 JSON
+第二层：标准结构 JSON -> CellCluster/GridBuilder -> LaTeXGenerator 输出 tabular
 ```
 
-## 1. 数据转换
+## 1. 第一层标准 JSON
 
-PubTables/PubTabNet 风格 JSON：
+一张图片对应一条记录：
 
-```bash
-python3 -m table_recon_engine.converters.pubtables_to_yolo \
-  --annotations data/pubtables/train.jsonl \
-  --image-root data/pubtables/images \
-  --output-dir data/yolo_cells \
-  --split train \
-  --copy-images
+```json
+{
+  "image": "PMC1142515_table_2.jpg",
+  "width": 640,
+  "height": 480,
+  "objects": [
+    {
+      "class": "table row",
+      "class_id": 1,
+      "bbox": [10.0, 35.0, 620.0, 58.0]
+    }
+  ]
+}
 ```
+
+训练标注 JSON 不带置信度；模型预测 JSON 会额外包含 `confidence`。第一层只负责复现 PubTables-1M Structure 标注中的六类结构框：
+
+- `table`
+- `table row`
+- `table column`
+- `table spanning cell`
+- `table column header`
+- `table projected row header`
+
+## 2. XML -> 标准 JSON
 
 PubTables-1M Structure VOC XML：
+
+```bash
+python3 -m table_recon_engine.converters.pubtables_xml_to_json \
+  --extracted-dir /root/autodl-tmp/table_recon_engine_train/datasets/pubtables1m_structure/extracted \
+  --output-dir /root/autodl-tmp/table_recon_engine_train/datasets/structure_json_pubtables \
+  --train-samples 5000 \
+  --val-samples 800
+```
+
+输出：
+
+```text
+annotations/train.jsonl
+annotations/val.jsonl
+annotations/manifest.json
+```
+
+## 3. 标准 JSON -> YOLO 数据集
+
+```bash
+python3 -m table_recon_engine.converters.structure_json_to_yolo \
+  --train-annotations /root/autodl-tmp/table_recon_engine_train/datasets/structure_json_pubtables/annotations/train.jsonl \
+  --val-annotations /root/autodl-tmp/table_recon_engine_train/datasets/structure_json_pubtables/annotations/val.jsonl \
+  --image-root /root/autodl-tmp/table_recon_engine_train/datasets/pubtables1m_structure/extracted \
+  --output-dir /root/autodl-tmp/table_recon_engine_train/datasets/yolo_structure_from_json
+```
+
+也可以使用旧的直转脚本做快速实验：
 
 ```bash
 python3 -m table_recon_engine.converters.pubtables_xml_to_yolo \
@@ -30,7 +75,7 @@ python3 -m table_recon_engine.converters.pubtables_xml_to_yolo \
   --val-samples 800
 ```
 
-ICDAR cTDaR XML：
+ICDAR cTDaR XML 快速转换：
 
 ```bash
 python3 -m table_recon_engine.converters.ctdar_to_yolo \
@@ -41,7 +86,7 @@ python3 -m table_recon_engine.converters.ctdar_to_yolo \
   --copy-images
 ```
 
-## 2. 数据增强
+## 4. 数据增强
 
 ```bash
 python3 -m table_recon_engine.augmentation.albumentations_yolo \
@@ -50,27 +95,42 @@ python3 -m table_recon_engine.augmentation.albumentations_yolo \
   --repeats 2
 ```
 
-## 3. YOLO 训练
+## 5. YOLO 训练
 
 ```bash
 python3 -m table_recon_engine.detection.train_yolo \
-  --data data/yolo_cells/data.yaml \
-  --model yolov8n.pt \
+  --data /root/autodl-tmp/table_recon_engine_train/datasets/yolo_structure_from_json/data.yaml \
+  --model yolov8n.yaml \
   --epochs 50 \
-  --imgsz 960
+  --imgsz 960 \
+  --batch 16 \
+  --project /root/autodl-tmp/table_recon_engine_train/runs \
+  --name yolo_structure_json
 ```
 
-## 4. 推理与 LaTeX 重建
+## 6. YOLO 推理 -> 标准 JSON
 
 ```bash
-python3 -m table_recon_engine.demo \
-  --weights runs/table_cells/yolo_cell_detector/weights/best.pt \
-  --source demo_images \
-  --output-dir outputs/demo \
+python3 -m table_recon_engine.detection.infer_yolo \
+  --weights /root/autodl-tmp/table_recon_engine_train/runs/yolo_structure_json/weights/best.pt \
+  --source /root/autodl-tmp/table_recon_engine_train/datasets/yolo_structure_from_json/images/val \
+  --output-json /root/autodl-tmp/table_recon_engine_train/outputs/pred_structure_val.json \
   --save-visuals
 ```
 
-## 5. 报告重点
+## 7. 第一层检测评估
+
+```bash
+python3 -m table_recon_engine.evaluation.detection_json \
+  --gt-json /root/autodl-tmp/table_recon_engine_train/datasets/structure_json_pubtables/annotations/val.jsonl \
+  --pred-json /root/autodl-tmp/table_recon_engine_train/outputs/pred_structure_val.json \
+  --output-json /root/autodl-tmp/table_recon_engine_train/outputs/eval_structure_val.json \
+  --iou-threshold 0.5
+```
+
+评估会输出每一类结构框的 Precision、Recall、F1、平均匹配 IoU，以及每张图的 `row/column/span/header` 数量是否与标注一致。
+
+## 8. 报告重点
 
 论文里少写 YOLO API，多写三个手写模块：
 

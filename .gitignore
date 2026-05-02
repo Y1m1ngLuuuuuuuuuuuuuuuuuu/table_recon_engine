@@ -6,6 +6,7 @@ env/
 conda_env/
 runs/
 outputs/
+local_outputs/
 checkpoints/
 datasets/
 data/
