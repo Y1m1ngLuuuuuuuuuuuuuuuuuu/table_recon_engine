@@ -125,6 +125,23 @@ python3 -m table_recon_engine.experiments.first_layer_pipeline \
   --no-amp
 ```
 
+如果已经准备好了同一份数据，但想换权重或换 run 名字，可以使用 `--dataset-name` 复用数据目录：
+
+```bash
+python3 -m table_recon_engine.experiments.first_layer_pipeline \
+  --extracted-dir /root/autodl-tmp/table_recon_engine_train/datasets/pubtables1m_structure/extracted \
+  --work-dir /root/autodl-tmp/table_recon_engine_train \
+  --dataset-name structure_50k_yolov8s \
+  --name structure_50k_finetune_5k \
+  --model /root/autodl-tmp/table_recon_engine_train/runs/yolo_structure_pubtables_5k_noamp/weights/best.pt \
+  --epochs 60 \
+  --imgsz 960 \
+  --batch 16 \
+  --workers 8 \
+  --no-amp \
+  --skip-prepare
+```
+
 ## 6. YOLO 推理 -> 标准 JSON
 
 ```bash

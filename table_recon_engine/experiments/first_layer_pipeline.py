@@ -23,6 +23,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--extracted-dir", type=Path, required=True, help="PubTables-1M extracted directory.")
     parser.add_argument("--work-dir", type=Path, required=True, help="Experiment root under the project workspace.")
     parser.add_argument("--name", default="structure_50k_yolov8s")
+    parser.add_argument(
+        "--dataset-name",
+        default=None,
+        help="Dataset directory suffix. Defaults to --name; set this to reuse prepared JSON/YOLO data.",
+    )
     parser.add_argument("--train-samples", type=int, default=50000)
     parser.add_argument("--val-samples", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=42)
@@ -45,8 +50,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    json_dir = args.work_dir / "datasets" / f"structure_json_{args.name}"
-    yolo_dir = args.work_dir / "datasets" / f"yolo_{args.name}"
+    dataset_name = args.dataset_name or args.name
+    json_dir = args.work_dir / "datasets" / f"structure_json_{dataset_name}"
+    yolo_dir = args.work_dir / "datasets" / f"yolo_{dataset_name}"
     runs_dir = args.work_dir / "runs"
     outputs_dir = args.work_dir / "outputs" / args.name
     run_dir = infer_run_dir(runs_dir, args.name)
@@ -60,6 +66,7 @@ def main() -> None:
 
     manifest = {
         "name": args.name,
+        "dataset_name": dataset_name,
         "extracted_dir": str(args.extracted_dir),
         "train_samples": args.train_samples,
         "val_samples": args.val_samples,
