@@ -24,6 +24,7 @@ def train_yolo(
     project: Path,
     name: str,
     device: str | int | None,
+    single_cls: bool,
 ) -> None:
     model = YOLO(model_name)
     model.train(
@@ -34,20 +35,21 @@ def train_yolo(
         project=str(project),
         name=name,
         device=select_yolo_device() if device is None else device,
-        single_cls=True,
+        single_cls=single_cls,
     )
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train YOLO for table-cell detection.")
+    parser = argparse.ArgumentParser(description="Train YOLO for table structure detection.")
     parser.add_argument("--data", type=Path, required=True, help="YOLO data.yaml")
     parser.add_argument("--model", default="yolov8n.pt")
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--imgsz", type=int, default=960)
     parser.add_argument("--batch", type=int, default=8)
     parser.add_argument("--project", type=Path, default=Path("runs/table_cells"))
-    parser.add_argument("--name", default="yolo_cell_detector")
+    parser.add_argument("--name", default="yolo_structure_detector")
     parser.add_argument("--device", default=None)
+    parser.add_argument("--single-cls", action="store_true")
     return parser.parse_args()
 
 
@@ -62,6 +64,7 @@ def main() -> None:
         project=args.project,
         name=args.name,
         device=args.device,
+        single_cls=args.single_cls,
     )
 
 
