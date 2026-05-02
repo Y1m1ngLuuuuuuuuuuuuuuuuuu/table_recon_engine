@@ -132,7 +132,8 @@ def main() -> None:
         postprocess_record(record, thresholds=thresholds, axis_nms_rules=axis_nms_rules)
         for record in load_structure_records(args.input_json)
     ]
-    write_structure_records(args.output_json, records, jsonl=not args.pretty_json)
+    write_jsonl = args.output_json.suffix.lower() == ".jsonl" and not args.pretty_json
+    write_structure_records(args.output_json, records, jsonl=write_jsonl)
     manifest = {
         "input_json": str(args.input_json),
         "output_json": str(args.output_json),
