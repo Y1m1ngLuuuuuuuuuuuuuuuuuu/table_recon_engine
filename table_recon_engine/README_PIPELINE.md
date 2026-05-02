@@ -166,7 +166,32 @@ python3 -m table_recon_engine.evaluation.detection_json \
 
 评估会输出每一类结构框的 Precision、Recall、F1、平均匹配 IoU，以及每张图的 `row/column/span/header` 数量是否与标注一致。
 
-## 8. 标准 JSON -> LaTeX 风格渲染
+## 8. 预测 JSON 后处理
+
+YOLO 的普通 NMS 基于二维 IoU，对横向长条的 `table row` 去重不够敏感。第一层预测 JSON 可以先经过结构后处理：
+
+```bash
+python3 -m table_recon_engine.postprocess_structure_json \
+  --input-json /root/autodl-tmp/table_recon_engine_train/outputs/structure_50k_finetune_5k_v2/pred_structure_val.json \
+  --output-json /root/autodl-tmp/table_recon_engine_train/outputs/structure_50k_finetune_5k_v2/pred_structure_val_post.json
+```
+
+默认策略：
+
+- `table row` 使用 Y 方向重叠去重，保留置信度最高的行框。
+- `table column` 使用 X 方向重叠去重，并将置信度阈值提高到 `0.65`。
+- `table column header` 使用 Y 方向重叠去重，并将置信度阈值提高到 `0.50`。
+
+然后用后处理后的 JSON 重新评估：
+
+```bash
+python3 -m table_recon_engine.evaluation.detection_json \
+  --gt-json /root/autodl-tmp/table_recon_engine_train/datasets/structure_json_structure_50k_yolov8s/annotations/val.jsonl \
+  --pred-json /root/autodl-tmp/table_recon_engine_train/outputs/structure_50k_finetune_5k_v2/pred_structure_val_post.json \
+  --output-json /root/autodl-tmp/table_recon_engine_train/outputs/structure_50k_finetune_5k_v2/eval_structure_val_post.json
+```
+
+## 9. 标准 JSON -> LaTeX 风格渲染
 
 GT JSON 和预测 JSON 都可以直接渲染成 `.tex` 和表格图。默认使用 booktabs/三线表风格，不画满格竖线：
 
@@ -181,7 +206,7 @@ python3 -m table_recon_engine.render_structure_json \
 
 如果需要调试每个单元格边界，可以改用 `--style grid`。
 
-## 9. 报告重点
+## 10. 报告重点
 
 论文里少写 YOLO API，多写三个手写模块：
 
