@@ -20,8 +20,9 @@ def prepare_runtime_env(work_dir: Path) -> dict[str, str]:
     env.setdefault("MPLCONFIGDIR", str(mpl_config_dir))
     env.setdefault("PYTHONUNBUFFERED", "1")
 
-    font_target = yolo_config_dir / "Arial.ttf"
-    if not font_target.exists():
+    font_targets = [yolo_config_dir / "Arial.ttf", yolo_config_dir / "Ultralytics" / "Arial.ttf"]
+    font_source_match = None
+    if any(not target.exists() for target in font_targets):
         for font_source in (
             Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
             Path("/usr/share/fonts/dejavu/DejaVuSans.ttf"),
@@ -29,8 +30,13 @@ def prepare_runtime_env(work_dir: Path) -> dict[str, str]:
             Path("/Library/Fonts/Arial.ttf"),
         ):
             if font_source.exists():
-                shutil.copyfile(font_source, font_target)
+                font_source_match = font_source
                 break
+    if font_source_match is not None:
+        for font_target in font_targets:
+            if not font_target.exists():
+                font_target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(font_source_match, font_target)
     return env
 
 
