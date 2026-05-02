@@ -108,6 +108,23 @@ python3 -m table_recon_engine.detection.train_yolo \
   --name yolo_structure_json
 ```
 
+推荐在 AutoDL 上使用第一层实验入口跑较大子集：
+
+```bash
+python3 -m table_recon_engine.experiments.first_layer_pipeline \
+  --extracted-dir /root/autodl-tmp/table_recon_engine_train/datasets/pubtables1m_structure/extracted \
+  --work-dir /root/autodl-tmp/table_recon_engine_train \
+  --name structure_50k_yolov8s \
+  --train-samples 50000 \
+  --val-samples 5000 \
+  --model yolov8s.yaml \
+  --epochs 80 \
+  --imgsz 960 \
+  --batch 16 \
+  --workers 8 \
+  --no-amp
+```
+
 ## 6. YOLO 推理 -> 标准 JSON
 
 ```bash
