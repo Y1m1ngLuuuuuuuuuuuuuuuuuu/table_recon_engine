@@ -20,6 +20,16 @@ python3 -m table_recon_engine.converters.pubtables_to_yolo \
   --copy-images
 ```
 
+PubTables-1M Structure VOC XML：
+
+```bash
+python3 -m table_recon_engine.converters.pubtables_xml_to_yolo \
+  --extracted-dir /root/autodl-tmp/table_recon_engine_train/datasets/pubtables1m_structure/extracted \
+  --output-dir /root/autodl-tmp/table_recon_engine_train/datasets/yolo_pubtables_structure \
+  --train-samples 5000 \
+  --val-samples 800
+```
+
 ICDAR cTDaR XML：
 
 ```bash
