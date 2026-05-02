@@ -166,7 +166,22 @@ python3 -m table_recon_engine.evaluation.detection_json \
 
 评估会输出每一类结构框的 Precision、Recall、F1、平均匹配 IoU，以及每张图的 `row/column/span/header` 数量是否与标注一致。
 
-## 8. 报告重点
+## 8. 标准 JSON -> LaTeX 风格渲染
+
+GT JSON 和预测 JSON 都可以直接渲染成 `.tex` 和表格图。默认使用 booktabs/三线表风格，不画满格竖线：
+
+```bash
+python3 -m table_recon_engine.render_structure_json \
+  --structure-json /root/autodl-tmp/table_recon_engine_train/datasets/structure_json_pubtables_5k/annotations/val.jsonl \
+  --image-root /root/autodl-tmp/table_recon_engine_train/datasets/pubtables1m_structure/extracted \
+  --output-dir /root/autodl-tmp/table_recon_engine_train/outputs/gt_latex_renders \
+  --limit 12 \
+  --style booktabs
+```
+
+如果需要调试每个单元格边界，可以改用 `--style grid`。
+
+## 9. 报告重点
 
 论文里少写 YOLO API，多写三个手写模块：
 
