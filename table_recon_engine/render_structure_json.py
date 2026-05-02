@@ -270,8 +270,22 @@ def render_table_image(
     else:
         x0, y0, x1, y1 = table_box.x0, table_box.y0, table_box.x1, table_box.y1
 
-    left, top = 32.0, 72.0
-    right, bottom = float(width - 32), float(height - 34)
+    max_left, max_top = 32.0, 72.0
+    max_right, max_bottom = float(width - 32), float(height - 34)
+    max_w = max_right - max_left
+    max_h = max_bottom - max_top
+    source_aspect = max(0.12, min(8.0, (x1 - x0) / max(1.0, y1 - y0)))
+    target_aspect = max_w / max(1.0, max_h)
+    if target_aspect > source_aspect:
+        table_h = max_h
+        table_w = table_h * source_aspect
+    else:
+        table_w = max_w
+        table_h = table_w / source_aspect
+    left = max_left + (max_w - table_w) * 0.5
+    right = left + table_w
+    top = max_top
+    bottom = top + table_h
     x_edges = scale_edges(grid_edges(structure.cols, n_cols, x0, x1, "x"), x0, x1, left, right)
     y_edges = scale_edges(grid_edges(structure.rows, n_rows, y0, y1, "y"), y0, y1, top, bottom)
 
