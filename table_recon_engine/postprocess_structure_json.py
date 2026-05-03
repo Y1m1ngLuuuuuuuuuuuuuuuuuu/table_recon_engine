@@ -21,7 +21,10 @@ DEFAULT_AXIS_NMS = {
     "table row": ("y", 0.75),
     "table column": ("x", 0.75),
     "table column header": ("y", 0.75),
+    "table projected row header": ("y", 0.75),
 }
+
+DEFAULT_TOP_ONE_CLASSES = {"table"}
 
 
 def confidence(obj: dict[str, Any]) -> float:
@@ -64,6 +67,7 @@ def postprocess_record(
     record: dict[str, Any],
     thresholds: dict[str, float],
     axis_nms_rules: dict[str, tuple[str, float]],
+    top_one_classes: set[str] | None = None,
 ) -> dict[str, Any]:
     objects = []
     for obj in record.get("objects", []):
@@ -77,9 +81,28 @@ def postprocess_record(
     for class_name, (axis, threshold) in axis_nms_rules.items():
         objects = axis_nms(objects, class_name=class_name, axis=axis, threshold=threshold)
 
+    for class_name in top_one_classes or set():
+        objects = keep_top_one(objects, class_name)
+
     output = dict(record)
     output["objects"] = objects
     return output
+
+
+def keep_top_one(objects: list[dict[str, Any]], class_name: str) -> list[dict[str, Any]]:
+    target = [
+        obj
+        for obj in objects
+        if normalize_class_name(str(obj.get("class", "")), obj.get("class_id")) == class_name
+    ]
+    rest = [
+        obj
+        for obj in objects
+        if normalize_class_name(str(obj.get("class", "")), obj.get("class_id")) != class_name
+    ]
+    if not target:
+        return rest
+    return rest + [max(target, key=confidence)]
 
 
 def parse_thresholds(items: list[str] | None) -> dict[str, float]:
@@ -129,7 +152,12 @@ def main() -> None:
     thresholds = parse_thresholds(args.threshold)
     axis_nms_rules = parse_axis_nms(args.axis_nms, disable_defaults=args.no_default_axis_nms)
     records = [
-        postprocess_record(record, thresholds=thresholds, axis_nms_rules=axis_nms_rules)
+        postprocess_record(
+            record,
+            thresholds=thresholds,
+            axis_nms_rules=axis_nms_rules,
+            top_one_classes=DEFAULT_TOP_ONE_CLASSES,
+        )
         for record in load_structure_records(args.input_json)
     ]
     write_jsonl = args.output_json.suffix.lower() == ".jsonl" and not args.pretty_json
@@ -139,6 +167,7 @@ def main() -> None:
         "output_json": str(args.output_json),
         "thresholds": thresholds,
         "axis_nms": axis_nms_rules,
+        "top_one_classes": sorted(DEFAULT_TOP_ONE_CLASSES),
         "records": len(records),
         "objects": sum(len(record.get("objects", [])) for record in records),
     }

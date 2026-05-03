@@ -178,9 +178,11 @@ python3 -m table_recon_engine.postprocess_structure_json \
 
 默认策略：
 
+- `table` 每张图只保留最高置信度的一个整表框。
 - `table row` 使用 Y 方向重叠去重，保留置信度最高的行框。
 - `table column` 使用 X 方向重叠去重，并将置信度阈值提高到 `0.65`。
 - `table column header` 使用 Y 方向重叠去重，并将置信度阈值提高到 `0.50`。
+- `table projected row header` 使用 Y 方向重叠去重。
 
 然后用后处理后的 JSON 重新评估：
 
