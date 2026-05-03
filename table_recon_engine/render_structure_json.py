@@ -135,6 +135,23 @@ def build_structure(record: dict[str, Any]) -> TableStructure:
     col_centers = [box.cx for box in cols]
     spans: list[SpanCell] = []
     seen: set[tuple[int, int, int, int]] = set()
+    for obj in record.get("objects", []):
+        class_name = normalize_class_name(str(obj.get("class", "")), obj.get("class_id"))
+        if class_name != "table spanning cell" or "logical_span" not in obj:
+            continue
+        logical = obj["logical_span"]
+        try:
+            row = int(logical["row"])
+            col = int(logical["col"])
+            rowspan = max(1, int(logical["rowspan"]))
+            colspan = max(1, int(logical["colspan"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        key = (row, col, rowspan, colspan)
+        if key not in seen and 0 <= row < len(rows) and 0 <= col < len(cols):
+            seen.add(key)
+            spans.append(SpanCell(row, col, rowspan, colspan))
+
     for box in sorted(span_boxes, key=lambda item: item.score, reverse=True):
         covered_rows = covered_indexes(box.y0, box.y1, row_centers)
         covered_cols = covered_indexes(box.x0, box.x1, col_centers)

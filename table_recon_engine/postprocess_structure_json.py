@@ -35,6 +35,15 @@ def bbox(obj: dict[str, Any]) -> list[float]:
     return [float(value) for value in obj["bbox"]]
 
 
+def axis_center(obj: dict[str, Any], axis: str) -> float:
+    x0, y0, x1, y1 = bbox(obj)
+    if axis == "x":
+        return (x0 + x1) * 0.5
+    if axis == "y":
+        return (y0 + y1) * 0.5
+    raise ValueError(f"Unsupported axis: {axis}")
+
+
 def axis_overlap(a: dict[str, Any], b: dict[str, Any], axis: str) -> float:
     ax0, ay0, ax1, ay1 = bbox(a)
     bx0, by0, bx1, by1 = bbox(b)
@@ -63,11 +72,97 @@ def axis_nms(objects: list[dict[str, Any]], class_name: str, axis: str, threshol
     return rest + kept
 
 
+def projected_span_bbox(
+    rows: list[dict[str, Any]],
+    cols: list[dict[str, Any]],
+    row: int,
+    col: int,
+    rowspan: int,
+    colspan: int,
+) -> list[float]:
+    row_items = rows[row : row + rowspan]
+    col_items = cols[col : col + colspan]
+    return [
+        min(bbox(item)[0] for item in col_items),
+        min(bbox(item)[1] for item in row_items),
+        max(bbox(item)[2] for item in col_items),
+        max(bbox(item)[3] for item in row_items),
+    ]
+
+
+def project_spanning_cells_to_grid(
+    objects: list[dict[str, Any]],
+    overlap_threshold: float,
+    snap_bbox: bool = False,
+) -> list[dict[str, Any]]:
+    rows = sorted(
+        [obj for obj in objects if normalize_class_name(str(obj.get("class", "")), obj.get("class_id")) == "table row"],
+        key=lambda item: axis_center(item, "y"),
+    )
+    cols = sorted(
+        [obj for obj in objects if normalize_class_name(str(obj.get("class", "")), obj.get("class_id")) == "table column"],
+        key=lambda item: axis_center(item, "x"),
+    )
+    if not rows or not cols:
+        return objects
+
+    rest = [
+        obj
+        for obj in objects
+        if normalize_class_name(str(obj.get("class", "")), obj.get("class_id")) != "table spanning cell"
+    ]
+    spans = [
+        obj
+        for obj in objects
+        if normalize_class_name(str(obj.get("class", "")), obj.get("class_id")) == "table spanning cell"
+    ]
+
+    kept: list[dict[str, Any]] = []
+    seen: set[tuple[int, int, int, int]] = set()
+    for obj in sorted(spans, key=confidence, reverse=True):
+        covered_rows = [
+            idx for idx, row in enumerate(rows) if axis_overlap(obj, row, "y") >= overlap_threshold
+        ]
+        covered_cols = [
+            idx for idx, col in enumerate(cols) if axis_overlap(obj, col, "x") >= overlap_threshold
+        ]
+        if not covered_rows or not covered_cols:
+            continue
+        row = min(covered_rows)
+        col = min(covered_cols)
+        rowspan = max(1, len(covered_rows))
+        colspan = max(1, len(covered_cols))
+        if rowspan == 1 and colspan == 1:
+            continue
+
+        key = (row, col, rowspan, colspan)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        clean_obj = dict(obj)
+        clean_obj["logical_span"] = {
+            "row": row,
+            "col": col,
+            "rowspan": rowspan,
+            "colspan": colspan,
+        }
+        clean_obj["projected_bbox"] = projected_span_bbox(rows, cols, row, col, rowspan, colspan)
+        if snap_bbox:
+            clean_obj["bbox"] = list(clean_obj["projected_bbox"])
+        kept.append(clean_obj)
+
+    return rest + kept
+
+
 def postprocess_record(
     record: dict[str, Any],
     thresholds: dict[str, float],
     axis_nms_rules: dict[str, tuple[str, float]],
     top_one_classes: set[str] | None = None,
+    project_spans: bool = True,
+    span_overlap_threshold: float = 0.60,
+    snap_span_bbox: bool = False,
 ) -> dict[str, Any]:
     objects = []
     for obj in record.get("objects", []):
@@ -83,6 +178,13 @@ def postprocess_record(
 
     for class_name in top_one_classes or set():
         objects = keep_top_one(objects, class_name)
+
+    if project_spans:
+        objects = project_spanning_cells_to_grid(
+            objects,
+            overlap_threshold=span_overlap_threshold,
+            snap_bbox=snap_span_bbox,
+        )
 
     output = dict(record)
     output["objects"] = objects
@@ -143,6 +245,9 @@ def parse_args() -> argparse.Namespace:
         help="Override/add an axis NMS rule, e.g. --axis-nms 'table row=y=0.75'.",
     )
     parser.add_argument("--no-default-axis-nms", action="store_true")
+    parser.add_argument("--no-project-spans", action="store_true")
+    parser.add_argument("--span-overlap-threshold", type=float, default=0.60)
+    parser.add_argument("--snap-span-bbox", action="store_true")
     parser.add_argument("--pretty-json", action="store_true")
     return parser.parse_args()
 
@@ -157,6 +262,9 @@ def main() -> None:
             thresholds=thresholds,
             axis_nms_rules=axis_nms_rules,
             top_one_classes=DEFAULT_TOP_ONE_CLASSES,
+            project_spans=not args.no_project_spans,
+            span_overlap_threshold=args.span_overlap_threshold,
+            snap_span_bbox=args.snap_span_bbox,
         )
         for record in load_structure_records(args.input_json)
     ]
@@ -168,6 +276,9 @@ def main() -> None:
         "thresholds": thresholds,
         "axis_nms": axis_nms_rules,
         "top_one_classes": sorted(DEFAULT_TOP_ONE_CLASSES),
+        "project_spans": not args.no_project_spans,
+        "span_overlap_threshold": args.span_overlap_threshold,
+        "snap_span_bbox": args.snap_span_bbox,
         "records": len(records),
         "objects": sum(len(record.get("objects", [])) for record in records),
     }

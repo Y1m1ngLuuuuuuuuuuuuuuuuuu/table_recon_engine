@@ -183,6 +183,7 @@ python3 -m table_recon_engine.postprocess_structure_json \
 - `table column` 使用 X 方向重叠去重，并将置信度阈值提高到 `0.65`。
 - `table column header` 使用 Y 方向重叠去重，并将置信度阈值提高到 `0.50`。
 - `table projected row header` 使用 Y 方向重叠去重。
+- `table spanning cell` 投影到去重后的行列网格，只保留覆盖多行或多列的逻辑跨度，并为后续 LaTeX 重建写入 `logical_span` 与 `projected_bbox`。
 
 然后用后处理后的 JSON 重新评估：
 
