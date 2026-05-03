@@ -209,10 +209,38 @@ python3 -m table_recon_engine.render_structure_json \
 
 如果需要调试每个单元格边界，可以改用 `--style grid`。
 
-## 10. 报告重点
+## 10. 二阶段 spanning cell 图推断
+
+当 `table row` 和 `table column` 已经比较稳定时，可以不再把 `table spanning cell` 当作一个大框目标硬检测，而是把基础网格中的每个 cell 当成图节点，把上下/左右相邻关系当成图边，训练边分类器判断 `merge` 或 `split`。
+
+训练标签可以直接由 PubTables-1M 的 `table spanning cell` 标注投影到 GT 行列网格得到，不需要额外人工标注：
+
+```bash
+python3 -m table_recon_engine.graph.train_span_gnn \
+  --train-input-json /root/autodl-tmp/table_recon_engine_train/datasets/structure_json_structure_50k_yolov8s/annotations/train.jsonl \
+  --train-label-json /root/autodl-tmp/table_recon_engine_train/datasets/structure_json_structure_50k_yolov8s/annotations/train.jsonl \
+  --val-input-json /root/autodl-tmp/table_recon_engine_train/outputs/structure_50k_finetune_5k_v2/pred_structure_val_post_v3.json \
+  --val-label-json /root/autodl-tmp/table_recon_engine_train/datasets/structure_json_structure_50k_yolov8s/annotations/val.jsonl \
+  --output-dir /root/autodl-tmp/table_recon_engine_train/runs/span_gnn_50k
+```
+
+推理时，图模型会删除或替换原本的一阶段 spanning cell 框，然后根据边分类结果生成合法矩形跨度，写回标准 JSON 的 `logical_span` 与 `projected_bbox`：
+
+```bash
+python3 -m table_recon_engine.graph.infer_span_gnn \
+  --input-json /root/autodl-tmp/table_recon_engine_train/outputs/structure_50k_finetune_5k_v2/pred_structure_val_post_v3.json \
+  --output-json /root/autodl-tmp/table_recon_engine_train/outputs/structure_50k_finetune_5k_v2/pred_structure_val_graph_spans.json \
+  --checkpoint /root/autodl-tmp/table_recon_engine_train/runs/span_gnn_50k/best.pt \
+  --threshold 0.50
+```
+
+默认使用几何和拓扑特征，训练速度快；如果后续需要利用 cell 内墨迹密度与边界投影特征，可以额外加入 `--image-root ... --use-visual-features`。这个模块不依赖 PyG 或 DGL，`graph/span_gnn.py` 里使用纯 PyTorch 的 `index_add_` 手写 message passing，比较适合在报告中作为“结构拓扑推断”的硬核部分。
+
+## 11. 报告重点
 
 论文里少写 YOLO API，多写三个手写模块：
 
 - `topology/cell_cluster.py`：动态阈值行列聚类。
 - `topology/grid_builder.py`：虚拟二维网格与空缺单元格填补。
 - `topology/latex_generator.py`：LaTeX 表格序列化。
+- `graph/grid_graph.py` 和 `graph/span_gnn.py`：基础网格图构建、spanning cell 边标签生成、纯 PyTorch 图消息传递与合并边分类。
