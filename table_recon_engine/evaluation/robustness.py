@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 import torch
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance
 
 from table_recon_engine.evaluation.detection_json import evaluate_records
 from table_recon_engine.postprocess_structure_json import (
@@ -60,6 +60,41 @@ def select_records(records: list[dict[str, Any]], samples: int, seed: int) -> li
     return records[:samples]
 
 
+def build_gaussian_kernel(sigma: float, radius: int | None = None) -> np.ndarray:
+    if sigma <= 0:
+        raise ValueError("sigma must be positive")
+    if radius is None:
+        radius = int(np.ceil(3.0 * sigma))
+
+    size = radius * 2 + 1
+    kernel = np.zeros((size, size), dtype=np.float32)
+    for y in range(size):
+        for x in range(size):
+            dy = y - radius
+            dx = x - radius
+            kernel[y, x] = np.exp(-(dx * dx + dy * dy) / (2.0 * sigma * sigma))
+    kernel /= float(kernel.sum())
+    return kernel
+
+
+def hand_written_gaussian_blur(image: Image.Image, sigma: float = 1.35) -> Image.Image:
+    kernel = build_gaussian_kernel(sigma=sigma)
+    radius = kernel.shape[0] // 2
+    src = np.asarray(image.convert("RGB"), dtype=np.float32)
+    padded = np.pad(src, ((radius, radius), (radius, radius), (0, 0)), mode="edge")
+    dst = np.zeros_like(src, dtype=np.float32)
+
+    height, width = src.shape[:2]
+    for ky in range(kernel.shape[0]):
+        for kx in range(kernel.shape[1]):
+            weight = kernel[ky, kx]
+            patch = padded[ky : ky + height, kx : kx + width]
+            dst += patch * weight
+
+    dst = np.clip(dst, 0, 255).astype(np.uint8)
+    return Image.fromarray(dst, mode="RGB")
+
+
 def apply_condition(image: Image.Image, condition: str, rng: np.random.Generator) -> Image.Image:
     image = image.convert("RGB")
     if condition == "clean":
@@ -70,7 +105,7 @@ def apply_condition(image: Image.Image, condition: str, rng: np.random.Generator
         arr = np.clip(arr + noise, 0, 255).astype(np.uint8)
         return Image.fromarray(arr, mode="RGB")
     if condition == "gaussian_blur":
-        return image.filter(ImageFilter.GaussianBlur(radius=1.35))
+        return hand_written_gaussian_blur(image, sigma=1.35)
     if condition == "brightness_contrast":
         image = ImageEnhance.Brightness(image).enhance(0.72)
         return ImageEnhance.Contrast(image).enhance(1.38)
